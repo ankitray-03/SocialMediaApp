@@ -13,6 +13,7 @@ import proxy from "express-http-proxy";
 // file import
 import errorHandler from "./middlewares/errorHandler.js";
 import logger from "./utils/logger.js";
+import validateToken from "./middlewares/authMiddleware.js";
 
 const app = express();
 const PORT = process.env.PORT;
@@ -44,7 +45,7 @@ app.use(limiter);
 // logging the req
 app.use((req, res, next) => {
   logger.info(`Recieved ${req.method} request to ${req.url}`);
-  logger.info(`$Request body : ${req.body}`);
+  logger.info(`Request body : ${req.body}`);
   next();
 });
 
@@ -85,6 +86,35 @@ app.use(
 );
 
 // post service
+
+// Media service
+app.use(
+  "/v1/media",
+  validateToken,
+  proxy(process.env.MEDIA_SERVICE_URL, {
+    ...proxyOptions,
+    proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
+      proxyReqOpts.headers["x-user-id"] = srcReq.user.userId;
+
+      if (
+        srcReq.headers["content-type"] &&
+        !srcReq.headers["content-type"].startsWith("multipart/form-data")
+      ) {
+        proxyReqOpts.headers["content-type"] = "application/json";
+      }
+
+      return proxyReqOpts;
+    },
+    userResDecorator: (proxyRes, proxyResData, userReq, userRes) => {
+      logger.info(
+        `Response recieved from MEDI-SERVICE : ${proxyRes.statusCode}`,
+      );
+
+      return proxyResData;
+    },
+    parseReqBody: false,
+  }),
+);
 
 // should be at last
 app.use(errorHandler);
